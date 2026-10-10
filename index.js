@@ -3,6 +3,7 @@ import cors from "cors";
 import "dotenv/config";
 import { connectDB } from "./src/config/db.js";
 import userRouter from "./src/routes/user.js";
+import messageRouter from "./src/routes/message.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be set and at least 32 characters");
@@ -28,6 +29,7 @@ app.use((req, res, next) => {
 });
 
 app.use("/api/auth", userRouter);
+app.use("/api/messages", messageRouter);
 
 app.use((err, req, res, next) => {
   if (err?.type === "entity.parse.failed") {
