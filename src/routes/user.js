@@ -1,7 +1,14 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { User } from "../models/user.js";
-import { requireAuth, signToken } from "../middleware/auth.js";
+import { RefreshToken } from "../models/refreshToken.js";
+import {
+  hashRefreshToken,
+  issueRefreshToken,
+  requireAuth,
+  revokeRefreshToken,
+  signAccessToken,
+} from "../middleware/auth.js";
 
 const router = Router();
 
@@ -41,9 +48,17 @@ function validateCredentials(body) {
   return null;
 }
 
-function publicAuth(user) {
+function readRefreshToken(body) {
+  const token = body?.refreshToken;
+  if (typeof token !== "string" || token.length < 20 || token.length > 200) return null;
+  return token;
+}
+
+async function issueSession(user) {
   return {
-    token: signToken(user.id),
+    accessToken: signAccessToken(user.id),
+    refreshToken: await issueRefreshToken(user.id),
+    expiresIn: 15 * 60,
     user: user.toPublic(),
   };
 }
@@ -62,7 +77,7 @@ router.post("/register", rateLimitAuth, async (req, res) => {
       password: req.body.password,
       lastSeen: new Date(),
     });
-    return res.status(201).json(publicAuth(user));
+    return res.status(201).json(await issueSession(user));
   } catch (err) {
     if (err?.code === 11000) {
       return res.status(409).json({
@@ -95,7 +110,52 @@ router.post("/login", rateLimitAuth, async (req, res) => {
   await User.updateOne({ _id: user._id }, { lastSeen });
   user.lastSeen = lastSeen;
 
-  return res.json(publicAuth(user));
+  return res.json(await issueSession(user));
+});
+
+router.post("/refresh", rateLimitAuth, async (req, res) => {
+  const refreshToken = readRefreshToken(req.body);
+  if (!refreshToken) {
+    return res.status(422).json({
+      error: { code: "VALIDATION_ERROR", message: "Refresh token is required" },
+    });
+  }
+
+  const existing = await RefreshToken.findOneAndDelete({
+    tokenHash: hashRefreshToken(refreshToken),
+    expiresAt: { $gt: new Date() },
+  });
+  if (!existing) {
+    return res.status(401).json({
+      error: { code: "INVALID_REFRESH_TOKEN", message: "Refresh token is invalid" },
+    });
+  }
+
+  const user = await User.findById(existing.user);
+  if (!user) {
+    return res.status(401).json({
+      error: { code: "INVALID_REFRESH_TOKEN", message: "Refresh token is invalid" },
+    });
+  }
+
+  return res.json(await issueSession(user));
+});
+
+router.post("/logout", rateLimitAuth, async (req, res) => {
+  const refreshToken = readRefreshToken(req.body);
+  if (!refreshToken) {
+    return res.status(422).json({
+      error: { code: "VALIDATION_ERROR", message: "Refresh token is required" },
+    });
+  }
+
+  await revokeRefreshToken(refreshToken);
+  return res.json({ ok: true });
+});
+
+router.post("/logout-all", requireAuth, async (req, res) => {
+  await RefreshToken.deleteMany({ user: req.userId });
+  return res.json({ ok: true });
 });
 
 router.get("/me", requireAuth, async (req, res) => {

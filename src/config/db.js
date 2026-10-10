@@ -6,8 +6,14 @@ export async function connectDB() {
     throw new Error("MONGO_URL is not set");
   }
 
+  const dbName = process.env.MONGO_DB || "chatapp";
   mongoose.set("strictQuery", true);
-  await mongoose.connect(uri, {
-    dbName: process.env.MONGO_DB || "chatapp",
-  });
+
+  try {
+    await mongoose.connect(uri, { dbName });
+    console.log(`MongoDB connected: ${dbName}`);
+  } catch (err) {
+    console.error(`MongoDB connection failed: ${err.message}`);
+    throw err;
+  }
 }
