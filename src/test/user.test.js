@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { DEMO_ACCOUNTS } from "../demoAccounts.js";
 import { readLogin, readRegister } from "../validation/user.js";
 
 test("login accepts username and password and ignores email", () => {
@@ -18,6 +19,13 @@ test("password is rejected when it exceeds 72 bytes", () => {
     readRegister({ username: "ada", email: "ada@example.com", password }).error,
     "Password must be at least 8 characters and no more than 72 bytes",
   );
+});
+
+test("demo accounts pass registration rules", () => {
+  for (const account of DEMO_ACCOUNTS) {
+    assert.deepEqual(readRegister(account), account);
+  }
+  assert.equal(DEMO_ACCOUNTS.length, 2);
 });
 
 test("register requires a normal unique-looking email", () => {

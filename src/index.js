@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import { connectDB } from "./config/db.js";
+import { seedDemoAccounts } from "./services/demoSeed.js";
 import userRouter from "./routes/user.js";
 import messageRouter from "./routes/message.js";
 import directoryRouter from "./routes/directory.js";
@@ -57,6 +58,7 @@ app.use((err, req, res, next) => {
 const server = createSocketServer(app, { allowedOrigins });
 
 await connectDB();
+await seedDemoAccounts();
 
 const port = Number(process.env.PORT) || 3000;
 server.listen(port, () => {
