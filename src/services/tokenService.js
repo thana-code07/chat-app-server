@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
-import { RevokedToken } from "../models/revokedToken.js";
 
 export const ACCESS_TTL_SECONDS = 7 * 24 * 60 * 60;
 
@@ -33,16 +32,4 @@ export function readAccessToken(token) {
   } catch {
     return null;
   }
-}
-
-export async function isAccessTokenRevoked(jti) {
-  return Boolean(await RevokedToken.exists({ jti }));
-}
-
-export async function revokeAccessToken({ jti, expiresAt }) {
-  await RevokedToken.updateOne(
-    { jti },
-    { $setOnInsert: { jti, expiresAt: new Date(expiresAt) } },
-    { upsert: true },
-  );
 }

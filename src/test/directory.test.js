@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readUserQuery } from "./directory.js";
+import { readUserQuery } from "../validation/directory.js";
 
 test("user search accepts a short query and ignores blank space", () => {
   assert.deepEqual(readUserQuery({ q: "  Ada " }), { q: "ada" });

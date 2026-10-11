@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readLogin, readRegister } from "./user.js";
+import { readLogin, readRegister } from "../validation/user.js";
 
 test("login accepts username and password and ignores email", () => {
   const result = readLogin({

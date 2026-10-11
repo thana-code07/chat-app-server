@@ -20,7 +20,7 @@ function readToken(socket) {
 
 export async function authenticateSocket(socket, next) {
   try {
-    const session = await verifyAccessToken(readToken(socket));
+    const session = verifyAccessToken(readToken(socket));
     if (!session) {
       next(new Error("Authentication required"));
       return;

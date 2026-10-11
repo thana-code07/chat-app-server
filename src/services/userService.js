@@ -1,12 +1,7 @@
 import bcrypt from "bcryptjs";
 import { User } from "../models/user.js";
 import { disconnectUserToken } from "../socket/realtime.js";
-import {
-  ACCESS_TTL_SECONDS,
-  readAccessToken,
-  revokeAccessToken,
-  signAccessToken,
-} from "./tokenService.js";
+import { ACCESS_TTL_SECONDS, readAccessToken, signAccessToken } from "./tokenService.js";
 
 const dummyHash = bcrypt.hashSync("not-a-real-password", 12);
 
@@ -65,8 +60,7 @@ export function readLogoutToken(token) {
   return session;
 }
 
-export async function logoutUser(session) {
-  await revokeAccessToken(session);
+export function logoutUser(session) {
   disconnectUserToken(session.userId, session.jti);
 }
 

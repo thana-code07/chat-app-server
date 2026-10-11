@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pairChatroomId } from "./chatroom.js";
+import { pairChatroomId } from "../services/chatroom.js";
 
 test("a pair of users always shares one chat room", () => {
   const ada = "64b000000000000000000001";

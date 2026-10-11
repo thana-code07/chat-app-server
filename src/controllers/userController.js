@@ -57,7 +57,7 @@ export async function logout(req, res) {
     });
   }
 
-  await logoutUser(session);
+  logoutUser(session);
   return res.json({ ok: true });
 }
 

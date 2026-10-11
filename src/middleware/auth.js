@@ -1,9 +1,8 @@
-import { isAccessTokenRevoked, readAccessToken } from "../services/tokenService.js";
+import { readAccessToken } from "../services/tokenService.js";
 
-export async function verifyAccessToken(token) {
+export function verifyAccessToken(token) {
   const session = readAccessToken(token);
   if (!session || session.expiresAt <= Date.now()) return null;
-  if (await isAccessTokenRevoked(session.jti)) return null;
   return session;
 }
 
@@ -11,7 +10,7 @@ export async function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization;
     const session = header?.startsWith("Bearer ")
-      ? await verifyAccessToken(header.slice("Bearer ".length))
+      ? verifyAccessToken(header.slice("Bearer ".length))
       : null;
     if (!session) {
       return res.status(401).json({
