@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { Message } from "../models/message.js";
 import { User } from "../models/user.js";
+import { pairChatroomId } from "./chatroom.js";
 
 const STATUS_RANK = { sent: 0, delivered: 1, read: 2 };
 
@@ -20,10 +21,12 @@ function samePayload(existing, input) {
   );
 }
 
-export async function sendMessage({ chatroomId, messageId, sender, receiver, message }) {
+export async function sendMessage({ messageId, sender, receiver, message }) {
   if (sender === receiver) {
     throw httpError(422, "VALIDATION_ERROR", "You cannot message yourself");
   }
+
+  const chatroomId = pairChatroomId(sender, receiver);
 
   const [senderUser, receiverUser] = await Promise.all([
     User.exists({ _id: sender }),
@@ -113,4 +116,40 @@ export async function updateMessageStatus({ userId, messageId, status }) {
     await message.save();
   }
   return message.toPublic();
+}
+
+async function advanceStatus(filter, status) {
+  const pending = await Message.find(filter);
+  const updated = [];
+  for (const message of pending) {
+    const saved = await Message.findOneAndUpdate(
+      { _id: message._id, status: filter.status },
+      { $set: { status } },
+      { returnDocument: "after" },
+    );
+    if (saved) updated.push(saved.toPublic());
+  }
+  return updated;
+}
+
+export async function deliverPending(userId) {
+  if (!mongoose.isValidObjectId(userId)) return [];
+  return advanceStatus({ receiver: userId, status: "sent" }, "delivered");
+}
+
+export async function markConversationRead({ userId, otherUserId }) {
+  if (!mongoose.isValidObjectId(userId)) {
+    throw httpError(401, "UNAUTHORIZED", "Authentication required");
+  }
+  if (!mongoose.isValidObjectId(otherUserId) || otherUserId === userId) {
+    throw httpError(422, "VALIDATION_ERROR", "userId must be another user");
+  }
+  const other = await User.exists({ _id: otherUserId });
+  if (!other) {
+    throw httpError(404, "USER_NOT_FOUND", "User not found");
+  }
+  return advanceStatus(
+    { sender: otherUserId, receiver: userId, status: { $in: ["sent", "delivered"] } },
+    "read",
+  );
 }

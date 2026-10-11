@@ -1,5 +1,10 @@
 import { updateLastSeen } from "../services/userService.js";
-import { sendMessage, updateMessageStatus } from "../services/messageService.js";
+import {
+  deliverPending,
+  markConversationRead,
+  sendMessage,
+  updateMessageStatus,
+} from "../services/messageService.js";
 import {
   MESSAGE_ID_RE,
   UPDATABLE_STATUSES,
@@ -25,6 +30,7 @@ const WATCH_MAX = 10;
 const WATCH_LIMIT = 50;
 const sendHits = new Map();
 const watchHits = new Map();
+const readHits = new Map();
 
 function allow(bucket, userId, windowMs, max) {
   const now = Date.now();
@@ -41,6 +47,7 @@ function allow(bucket, userId, windowMs, max) {
 function clearLimits(userId) {
   sendHits.delete(userId);
   watchHits.delete(userId);
+  readHits.delete(userId);
 }
 
 function ackError(ack, code, message) {
@@ -166,6 +173,40 @@ async function onSend(socket, payload, ack) {
   }
 }
 
+async function onRead(socket, payload, ack) {
+  try {
+    if (!ensureSession(socket, ack)) return;
+    const userId = socket.data.userId;
+    const otherUserId = readObjectId(payload?.userId);
+    if (!otherUserId) {
+      ackError(ack, "VALIDATION_ERROR", "userId must be a valid id");
+      return;
+    }
+    if (!allow(readHits, userId, SEND_WINDOW_MS, SEND_MAX)) {
+      ackError(ack, "RATE_LIMITED", "Too many attempts. Try again later.");
+      return;
+    }
+
+    const messages = await markConversationRead({ userId, otherUserId });
+    for (const message of messages) {
+      publishMessageStatus(message, { exceptSocketId: socket.id });
+    }
+    ackOk(ack, { messages });
+  } catch (err) {
+    ackFromError(ack, err);
+  }
+}
+
+function publishDelivered(userId) {
+  deliverPending(userId)
+    .then((messages) => {
+      for (const message of messages) publishMessageStatus(message);
+    })
+    .catch((err) => {
+      console.error(err?.message || "Failed to mark messages delivered");
+    });
+}
+
 async function onStatus(socket, payload, ack) {
   try {
     if (!ensureSession(socket, ack)) return;
@@ -198,7 +239,10 @@ export async function registerSocketHandlers(socket) {
   await socket.join(userRoom(userId));
 
   const { becameOnline, generation } = trackConnect(userId, socket.id);
-  if (becameOnline) publishOnline(userId, generation);
+  if (becameOnline) {
+    publishOnline(userId, generation);
+    publishDelivered(userId);
+  }
 
   socket.on("presence:watch", (payload, ack) => {
     onWatch(socket, payload, ack);
@@ -208,6 +252,9 @@ export async function registerSocketHandlers(socket) {
   });
   socket.on("message:status", (payload, ack) => {
     onStatus(socket, payload, ack);
+  });
+  socket.on("message:read", (payload, ack) => {
+    onRead(socket, payload, ack);
   });
   socket.on("disconnect", () => {
     const result = trackDisconnect(userId, socket.id);

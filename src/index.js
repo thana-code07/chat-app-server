@@ -4,6 +4,8 @@ import "dotenv/config";
 import { connectDB } from "./config/db.js";
 import userRouter from "./routes/user.js";
 import messageRouter from "./routes/message.js";
+import directoryRouter from "./routes/directory.js";
+import conversationRouter from "./routes/conversation.js";
 import { createSocketServer } from "./socket/index.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
@@ -30,7 +32,9 @@ app.use((req, res, next) => {
 });
 
 app.use("/api/auth", userRouter);
+app.use("/api/users", directoryRouter);
 app.use("/api/messages", messageRouter);
+app.use("/api/conversations", conversationRouter);
 
 app.use((err, req, res, next) => {
   if (err?.type === "entity.parse.failed") {

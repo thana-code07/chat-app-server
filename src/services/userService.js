@@ -78,6 +78,22 @@ export async function getCurrentUser(userId) {
   return user.toPublic();
 }
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export async function findUsersByName({ userId, q }) {
+  if (!q) return [];
+  const users = await User.find({
+    _id: { $ne: userId },
+    username: { $regex: `^${escapeRegex(q)}` },
+  })
+    .select("username")
+    .sort({ username: 1 })
+    .limit(20);
+  return users.map((user) => ({ id: user._id.toString(), username: user.username }));
+}
+
 export async function updateLastSeen(userId) {
   const user = await User.findByIdAndUpdate(
     userId,
