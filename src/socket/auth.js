@@ -8,6 +8,13 @@ function readToken(socket) {
   if (typeof header === "string" && header.startsWith("Bearer ")) {
     return header.slice("Bearer ".length);
   }
+
+  // chat_plugin 1.0.0 connects with the apiUrl only and never sets handshake auth.
+  const queryToken = socket.handshake.query?.token;
+  if (typeof queryToken === "string" && queryToken) return queryToken;
+  if (Array.isArray(queryToken) && typeof queryToken[0] === "string" && queryToken[0]) {
+    return queryToken[0];
+  }
   return null;
 }
 

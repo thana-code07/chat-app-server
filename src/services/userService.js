@@ -25,16 +25,21 @@ function issueSession(user) {
   };
 }
 
-export async function registerUser({ username, password }) {
+export async function registerUser({ username, email, password }) {
   try {
     const user = await User.create({
       username,
+      email,
       password,
       lastSeen: new Date(),
     });
     return issueSession(user);
   } catch (err) {
     if (err?.code === 11000) {
+      const field = Object.keys(err.keyPattern ?? err.keyValue ?? {})[0];
+      if (field === "email") {
+        throw httpError(409, "EMAIL_TAKEN", "Email is already registered");
+      }
       throw httpError(409, "USERNAME_TAKEN", "Username is already taken");
     }
     throw err;

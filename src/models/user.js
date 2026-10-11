@@ -14,6 +14,12 @@ const userSchema = new mongoose.Schema(
       minlength: 3,
       maxlength: 32,
     },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      maxlength: 254,
+    },
     password: {
       type: String,
       required: true,
@@ -27,6 +33,11 @@ const userSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+userSchema.index(
+  { email: 1 },
+  { unique: true, partialFilterExpression: { email: { $type: "string" } } },
+);
+
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
   this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
@@ -36,6 +47,7 @@ userSchema.methods.toPublic = function toPublic() {
   return {
     id: this._id.toString(),
     username: this.username,
+    email: this.email ?? null,
     lastSeen: this.lastSeen,
   };
 };
