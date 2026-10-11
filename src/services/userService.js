@@ -1,11 +1,10 @@
 import bcrypt from "bcryptjs";
 import { User } from "../models/user.js";
-import { RefreshToken } from "../models/refreshToken.js";
+import { disconnectUserToken } from "../socket/realtime.js";
 import {
   ACCESS_TTL_SECONDS,
-  hashRefreshToken,
-  issueRefreshToken,
-  revokeRefreshToken,
+  readAccessToken,
+  revokeAccessToken,
   signAccessToken,
 } from "./tokenService.js";
 
@@ -18,10 +17,9 @@ function httpError(status, code, message) {
   return error;
 }
 
-async function issueSession(user) {
+function issueSession(user) {
   return {
     accessToken: signAccessToken(user.id),
-    refreshToken: await issueRefreshToken(user.id),
     expiresIn: ACCESS_TTL_SECONDS,
     user: user.toPublic(),
   };
@@ -56,29 +54,15 @@ export async function loginUser({ username, password }) {
   return issueSession(user);
 }
 
-export async function refreshSession(refreshToken) {
-  const existing = await RefreshToken.findOneAndDelete({
-    tokenHash: hashRefreshToken(refreshToken),
-    expiresAt: { $gt: new Date() },
-  });
-  if (!existing) {
-    throw httpError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid");
-  }
-
-  const user = await User.findById(existing.user);
-  if (!user) {
-    throw httpError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid");
-  }
-
-  return issueSession(user);
+export function readLogoutToken(token) {
+  const session = readAccessToken(token);
+  if (!session || session.expiresAt <= Date.now()) return null;
+  return session;
 }
 
-export async function logoutSession(refreshToken) {
-  await revokeRefreshToken(refreshToken);
-}
-
-export async function logoutAllSessions(userId) {
-  await RefreshToken.deleteMany({ user: userId });
+export async function logoutUser(session) {
+  await revokeAccessToken(session);
+  disconnectUserToken(session.userId, session.jti);
 }
 
 export async function getCurrentUser(userId) {

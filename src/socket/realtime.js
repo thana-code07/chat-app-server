@@ -15,6 +15,15 @@ export function emitToUser(userId, event, payload, exceptSocketId) {
   operator.emit(event, payload);
 }
 
+export function disconnectUserToken(userId, jti) {
+  if (!io) return;
+  for (const socket of io.sockets.sockets.values()) {
+    if (socket.data.userId !== userId || socket.data.jti !== jti) continue;
+    socket.emit("auth:expired");
+    setTimeout(() => socket.disconnect(true), 100);
+  }
+}
+
 export function emitPresence(presence) {
   if (!io) return;
   io.to(presenceRoom(presence.userId)).emit("presence:update", presence);

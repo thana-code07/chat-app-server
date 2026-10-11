@@ -1,31 +1,27 @@
-import jwt from "jsonwebtoken";
+import { isAccessTokenRevoked, readAccessToken } from "../services/tokenService.js";
 
-export function verifyAccessToken(token) {
-  if (typeof token !== "string" || !token) return null;
-
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
-    if (payload?.typ !== "access" || typeof payload.sub !== "string") return null;
-    return {
-      userId: payload.sub,
-      expiresAt: typeof payload.exp === "number" ? payload.exp * 1000 : 0,
-    };
-  } catch {
-    return null;
-  }
+export async function verifyAccessToken(token) {
+  const session = readAccessToken(token);
+  if (!session || session.expiresAt <= Date.now()) return null;
+  if (await isAccessTokenRevoked(session.jti)) return null;
+  return session;
 }
 
-export function requireAuth(req, res, next) {
-  const header = req.headers.authorization;
-  const session = header?.startsWith("Bearer ")
-    ? verifyAccessToken(header.slice("Bearer ".length))
-    : null;
-  if (!session) {
-    return res.status(401).json({
-      error: { code: "UNAUTHORIZED", message: "Authentication required" },
-    });
-  }
+export async function requireAuth(req, res, next) {
+  try {
+    const header = req.headers.authorization;
+    const session = header?.startsWith("Bearer ")
+      ? await verifyAccessToken(header.slice("Bearer ".length))
+      : null;
+    if (!session) {
+      return res.status(401).json({
+        error: { code: "UNAUTHORIZED", message: "Authentication required" },
+      });
+    }
 
-  req.userId = session.userId;
-  next();
+    req.userId = session.userId;
+    next();
+  } catch (err) {
+    next(err);
+  }
 }

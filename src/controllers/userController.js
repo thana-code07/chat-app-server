@@ -1,9 +1,8 @@
 import {
   getCurrentUser,
   loginUser,
-  logoutAllSessions,
-  logoutSession,
-  refreshSession,
+  logoutUser,
+  readLogoutToken,
   registerUser,
   updateLastSeen,
 } from "../services/userService.js";
@@ -23,12 +22,6 @@ function validateCredentials(body) {
     return "Password must be 8-72 characters";
   }
   return null;
-}
-
-function readRefreshToken(body) {
-  const token = body?.refreshToken;
-  if (typeof token !== "string" || token.length < 20 || token.length > 200) return null;
-  return token;
 }
 
 function sendServiceError(err, res) {
@@ -76,35 +69,17 @@ export async function login(req, res) {
   }
 }
 
-export async function refresh(req, res) {
-  const refreshToken = readRefreshToken(req.body);
-  if (!refreshToken) {
-    return res.status(422).json({
-      error: { code: "VALIDATION_ERROR", message: "Refresh token is required" },
-    });
-  }
-
-  try {
-    return res.json(await refreshSession(refreshToken));
-  } catch (err) {
-    return sendServiceError(err, res);
-  }
-}
-
 export async function logout(req, res) {
-  const refreshToken = readRefreshToken(req.body);
-  if (!refreshToken) {
-    return res.status(422).json({
-      error: { code: "VALIDATION_ERROR", message: "Refresh token is required" },
+  const header = req.headers.authorization;
+  const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+  const session = readLogoutToken(token);
+  if (!session) {
+    return res.status(401).json({
+      error: { code: "UNAUTHORIZED", message: "Authentication required" },
     });
   }
 
-  await logoutSession(refreshToken);
-  return res.json({ ok: true });
-}
-
-export async function logoutAll(req, res) {
-  await logoutAllSessions(req.userId);
+  await logoutUser(session);
   return res.json({ ok: true });
 }
 

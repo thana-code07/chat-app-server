@@ -11,14 +11,19 @@ function readToken(socket) {
   return null;
 }
 
-export function authenticateSocket(socket, next) {
-  const session = verifyAccessToken(readToken(socket));
-  if (!session || session.expiresAt <= Date.now()) {
-    next(new Error("Authentication required"));
-    return;
-  }
+export async function authenticateSocket(socket, next) {
+  try {
+    const session = await verifyAccessToken(readToken(socket));
+    if (!session) {
+      next(new Error("Authentication required"));
+      return;
+    }
 
-  socket.data.userId = session.userId;
-  socket.data.expiresAt = session.expiresAt;
-  next();
+    socket.data.userId = session.userId;
+    socket.data.expiresAt = session.expiresAt;
+    socket.data.jti = session.jti;
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
