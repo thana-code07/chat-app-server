@@ -49,6 +49,15 @@ export async function listConversations(userId) {
         created_at: { $first: "$created_at" },
         status: { $first: "$status" },
         sender: { $first: "$sender" },
+        unreadCount: {
+          $sum: {
+            $cond: [
+              { $and: [{ $eq: ["$receiver", me] }, { $ne: ["$status", "read"] }] },
+              1,
+              0,
+            ],
+          },
+        },
       },
     },
     { $sort: { created_at: -1 } },
@@ -66,6 +75,7 @@ export async function listConversations(userId) {
         chatroomId: pairChatroomId(userId, partnerId),
         user: { id: partnerId, username: names.get(partnerId) },
         isOnline: isOnline(partnerId),
+        unreadCount: row.unreadCount,
         lastMessage: {
           message: row.message,
           created_at: row.created_at,

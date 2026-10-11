@@ -11,7 +11,7 @@ export function readUserQuery(query) {
 
 export function readPage(query) {
   const page = query?.page === undefined ? 1 : Number(query.page);
-  const pageSize = query?.pageSize === undefined ? 50 : Number(query.pageSize);
+  const pageSize = query?.pageSize === undefined ? 20 : Number(query.pageSize);
   if (!Number.isInteger(page) || page < 1) return { error: "page must be an integer of 1 or more" };
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
     return { error: "pageSize must be an integer from 1 to 50" };
