@@ -1,15 +1,14 @@
 import mongoose from "mongoose";
 import { Message } from "../models/message.js";
 import { User } from "../models/user.js";
+import { httpError } from "../httpError.js";
 import { pairChatroomId } from "./chatroom.js";
+import { recordConversationRead, recordNewMessage, recordStatuses } from "./conversationService.js";
 
-const STATUS_RANK = { sent: 0, delivered: 1, read: 2 };
-
-function httpError(status, code, message) {
-  const error = new Error(message);
-  error.status = status;
-  error.code = code;
-  return error;
+export function earlierStatuses(status) {
+  if (status === "delivered") return ["sent"];
+  if (status === "read") return ["sent", "delivered"];
+  return [];
 }
 
 function samePayload(existing, input) {
@@ -21,12 +20,15 @@ function samePayload(existing, input) {
   );
 }
 
-export async function sendMessage({ messageId, sender, receiver, message }) {
+export async function sendMessage({ messageId, sender, receiver, message, chatroomId }) {
   if (sender === receiver) {
     throw httpError(422, "VALIDATION_ERROR", "You cannot message yourself");
   }
 
-  const chatroomId = pairChatroomId(sender, receiver);
+  const expectedRoom = pairChatroomId(sender, receiver);
+  if (chatroomId !== expectedRoom) {
+    throw httpError(422, "VALIDATION_ERROR", "chatroomId does not match this conversation");
+  }
 
   const [senderUser, receiverUser] = await Promise.all([
     User.exists({ _id: sender }),
@@ -41,7 +43,7 @@ export async function sendMessage({ messageId, sender, receiver, message }) {
 
   try {
     const created = await Message.create({
-      chatroomId,
+      chatroomId: expectedRoom,
       messageId,
       sender,
       receiver,
@@ -49,13 +51,14 @@ export async function sendMessage({ messageId, sender, receiver, message }) {
       status: "sent",
       created_at: new Date(),
     });
+    await recordNewMessage(created);
     return { message: created.toPublic(), created: true };
   } catch (err) {
     if (err?.code !== 11000) throw err;
   }
 
   const existing = await Message.findOne({ messageId });
-  if (!existing || !samePayload(existing, { chatroomId, sender, receiver, message })) {
+  if (!existing || !samePayload(existing, { chatroomId: expectedRoom, sender, receiver, message })) {
     throw httpError(409, "MESSAGE_ID_TAKEN", "messageId is already in use");
   }
   return { message: existing.toPublic(), created: false };
@@ -69,7 +72,7 @@ export async function listMessages({ userId, chatroomId, page, pageSize }) {
   const [totalItems, messages] = await Promise.all([
     Message.countDocuments(filter),
     Message.find(filter)
-      .sort({ created_at: -1 })
+      .sort({ created_at: -1, messageId: -1 })
       .skip((page - 1) * pageSize)
       .limit(pageSize),
   ]);
@@ -101,35 +104,38 @@ export async function updateMessageStatus({ userId, messageId, status }) {
     throw httpError(401, "UNAUTHORIZED", "Authentication required");
   }
 
-  const message = await Message.findOne({ messageId });
-  if (!message) {
+  const earlier = earlierStatuses(status);
+  const updated = await Message.findOneAndUpdate(
+    { messageId, receiver: userId, status: { $in: earlier } },
+    { $set: { status } },
+    { returnDocument: "after" },
+  );
+  if (updated) {
+    const message = updated.toPublic();
+    await recordStatuses([message]);
+    return message;
+  }
+
+  const existing = await Message.findOne({ messageId });
+  if (!existing) {
     throw httpError(404, "MESSAGE_NOT_FOUND", "Message not found");
   }
-  if (message.receiver.toString() !== userId) {
+  if (existing.receiver.toString() !== userId) {
     throw httpError(403, "FORBIDDEN", "Only the receiver can update message status");
   }
-  if (STATUS_RANK[status] < STATUS_RANK[message.status]) {
-    throw httpError(409, "INVALID_STATUS", "Message status cannot move backwards");
-  }
-  if (status !== message.status) {
-    message.status = status;
-    await message.save();
-  }
-  return message.toPublic();
+  if (existing.status === status) return existing.toPublic();
+  throw httpError(409, "INVALID_STATUS", "Message status cannot move backwards");
 }
 
 async function advanceStatus(filter, status) {
-  const pending = await Message.find(filter);
-  const updated = [];
-  for (const message of pending) {
-    const saved = await Message.findOneAndUpdate(
-      { _id: message._id, status: filter.status },
-      { $set: { status } },
-      { returnDocument: "after" },
-    );
-    if (saved) updated.push(saved.toPublic());
-  }
-  return updated;
+  const pending = await Message.find(filter).select("_id");
+  if (!pending.length) return [];
+  const ids = pending.map((message) => message._id);
+  await Message.updateMany({ _id: { $in: ids }, status: filter.status }, { $set: { status } });
+  const saved = await Message.find({ _id: { $in: ids }, status });
+  const messages = saved.map((message) => message.toPublic());
+  await recordStatuses(messages);
+  return messages;
 }
 
 export async function deliverPending(userId) {
@@ -148,8 +154,10 @@ export async function markConversationRead({ userId, otherUserId }) {
   if (!other) {
     throw httpError(404, "USER_NOT_FOUND", "User not found");
   }
-  return advanceStatus(
+  const messages = await advanceStatus(
     { sender: otherUserId, receiver: userId, status: { $in: ["sent", "delivered"] } },
     "read",
   );
+  await recordConversationRead(userId, otherUserId);
+  return messages;
 }

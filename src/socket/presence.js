@@ -52,18 +52,17 @@ function toPresence(user) {
   return {
     userId,
     isOnline: isOnline(userId),
-    lastSeen: user.lastSeen ?? null,
   };
 }
 
 export async function presenceFor(userIds) {
   if (!userIds.length) return [];
-  const users = await User.find({ _id: { $in: userIds } }).select("lastSeen");
+  const users = await User.find({ _id: { $in: userIds } }).select("_id");
   const byId = new Map(users.map((user) => [user._id.toString(), user]));
   return userIds.filter((id) => byId.has(id)).map((id) => toPresence(byId.get(id)));
 }
 
 export async function presenceForUser(userId) {
-  const user = await User.findById(userId).select("lastSeen");
+  const user = await User.findById(userId).select("_id");
   return user ? toPresence(user) : null;
 }

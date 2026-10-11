@@ -8,7 +8,7 @@ export function createSocketServer(app, { allowedOrigins } = {}) {
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
     cors: {
-      origin: allowedOrigins?.length ? allowedOrigins : true,
+      origin: allowedOrigins,
       methods: ["GET", "POST"],
       allowedHeaders: ["Content-Type", "Authorization"],
     },

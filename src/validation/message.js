@@ -4,6 +4,28 @@ import { MESSAGE_STATUSES } from "../models/message.js";
 export const MESSAGE_ID_RE = /^[a-zA-Z0-9_-]{8,64}$/;
 export const UPDATABLE_STATUSES = MESSAGE_STATUSES.filter((status) => status !== "sent");
 
+export function readMessageCursor(value) {
+  if (value === undefined || value === "") return { before: null };
+  if (typeof value !== "string") return { error: "before must be a message cursor" };
+  const split = value.lastIndexOf("|");
+  if (split <= 0) return { error: "before must be a message cursor" };
+  const at = new Date(value.slice(0, split));
+  const messageId = value.slice(split + 1);
+  if (Number.isNaN(at.getTime()) || !MESSAGE_ID_RE.test(messageId)) {
+    return { error: "before must be a message cursor" };
+  }
+  return { before: { at, messageId } };
+}
+
+export function readThreadLimit(value) {
+  if (value === undefined) return { limit: 30 };
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+    return { error: "limit must be an integer from 1 to 50" };
+  }
+  return { limit };
+}
+
 export function readObjectId(value) {
   if (typeof value !== "string" || !mongoose.isValidObjectId(value)) return null;
   return value;

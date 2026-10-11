@@ -29,6 +29,10 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    conversationsSeeded: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );

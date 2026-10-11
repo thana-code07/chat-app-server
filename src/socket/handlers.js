@@ -1,3 +1,4 @@
+import { allowHit } from "../middleware/rateLimit.js";
 import { updateLastSeen } from "../services/userService.js";
 import {
   deliverPending,
@@ -28,27 +29,6 @@ const SEND_MAX = 20;
 const WATCH_WINDOW_MS = 10_000;
 const WATCH_MAX = 10;
 const WATCH_LIMIT = 50;
-const sendHits = new Map();
-const watchHits = new Map();
-const readHits = new Map();
-
-function allow(bucket, userId, windowMs, max) {
-  const now = Date.now();
-  const recent = (bucket.get(userId) || []).filter((timestamp) => now - timestamp < windowMs);
-  if (recent.length >= max) {
-    bucket.set(userId, recent);
-    return false;
-  }
-  recent.push(now);
-  bucket.set(userId, recent);
-  return true;
-}
-
-function clearLimits(userId) {
-  sendHits.delete(userId);
-  watchHits.delete(userId);
-  readHits.delete(userId);
-}
 
 function ackError(ack, code, message) {
   if (typeof ack !== "function") return;
@@ -114,14 +94,12 @@ function publishOnline(userId, generation) {
 
 function publishOffline(userId, generation) {
   updateLastSeen(userId)
-    .then((user) => {
-      if (!isSamePresence(userId, generation) || isOnline(userId)) return;
-      emitPresence({ userId, isOnline: false, lastSeen: user.lastSeen });
-    })
     .catch((err) => {
       console.error(err?.message || "Failed to update last seen");
+    })
+    .finally(() => {
       if (!isSamePresence(userId, generation) || isOnline(userId)) return;
-      emitPresence({ userId, isOnline: false, lastSeen: new Date() });
+      emitPresence({ userId, isOnline: false });
     });
 }
 
@@ -129,7 +107,7 @@ async function onWatch(socket, payload, ack) {
   try {
     if (!ensureSession(socket, ack)) return;
     const userId = socket.data.userId;
-    if (!allow(watchHits, userId, WATCH_WINDOW_MS, WATCH_MAX)) {
+    if (!allowHit("watch", userId, WATCH_WINDOW_MS, WATCH_MAX)) {
       ackError(ack, "RATE_LIMITED", "Too many attempts. Try again later.");
       return;
     }
@@ -160,7 +138,7 @@ async function onSend(socket, payload, ack) {
       ackError(ack, "VALIDATION_ERROR", parsed.error);
       return;
     }
-    if (!allow(sendHits, userId, SEND_WINDOW_MS, SEND_MAX)) {
+    if (!allowHit("send", userId, SEND_WINDOW_MS, SEND_MAX)) {
       ackError(ack, "RATE_LIMITED", "Too many messages. Try again later.");
       return;
     }
@@ -182,7 +160,7 @@ async function onRead(socket, payload, ack) {
       ackError(ack, "VALIDATION_ERROR", "userId must be a valid id");
       return;
     }
-    if (!allow(readHits, userId, SEND_WINDOW_MS, SEND_MAX)) {
+    if (!allowHit("read", userId, SEND_WINDOW_MS, SEND_MAX)) {
       ackError(ack, "RATE_LIMITED", "Too many attempts. Try again later.");
       return;
     }
@@ -221,7 +199,7 @@ async function onStatus(socket, payload, ack) {
       ackError(ack, "VALIDATION_ERROR", "status must be delivered or read");
       return;
     }
-    if (!allow(sendHits, userId, SEND_WINDOW_MS, SEND_MAX)) {
+    if (!allowHit("send", userId, SEND_WINDOW_MS, SEND_MAX)) {
       ackError(ack, "RATE_LIMITED", "Too many messages. Try again later.");
       return;
     }
@@ -259,7 +237,6 @@ export async function registerSocketHandlers(socket) {
   socket.on("disconnect", () => {
     const result = trackDisconnect(userId, socket.id);
     if (!result.wentOffline) return;
-    clearLimits(userId);
     publishOffline(userId, result.generation);
   });
 

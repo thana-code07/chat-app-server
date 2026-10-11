@@ -20,8 +20,9 @@ function readUsername(body) {
 
 function readPassword(body) {
   const password = typeof body.password === "string" ? body.password : "";
-  if (password.length < 8 || password.length > 72) {
-    return { error: "Password must be 8-72 characters" };
+  const bytes = Buffer.byteLength(password);
+  if (password.length < 8 || bytes > 72) {
+    return { error: "Password must be at least 8 characters and no more than 72 bytes" };
   }
   return { password };
 }

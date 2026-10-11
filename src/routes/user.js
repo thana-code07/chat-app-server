@@ -6,6 +6,7 @@ import {
   logout,
   me,
   register,
+  removeAccount,
   touchLastSeen,
 } from "../controllers/userController.js";
 
@@ -14,6 +15,7 @@ const router = Router();
 router.post("/register", rateLimitAuth, register);
 router.post("/login", rateLimitAuth, login);
 router.post("/logout", logout);
+router.delete("/account", requireAuth, removeAccount);
 router.get("/me", requireAuth, me);
 router.patch("/last-seen", requireAuth, touchLastSeen);
 

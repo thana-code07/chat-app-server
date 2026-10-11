@@ -13,15 +13,20 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
 }
 
 const app = express();
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",")
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+if (!allowedOrigins.length) {
+  throw new Error("ALLOWED_ORIGINS must list at least one origin");
+}
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
 app.use(
   cors({
-    origin: allowedOrigins?.length ? allowedOrigins : true,
+    origin: allowedOrigins,
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );

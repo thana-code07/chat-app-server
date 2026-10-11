@@ -1,6 +1,6 @@
 import { verifyAccessToken } from "../middleware/auth.js";
 
-function readToken(socket) {
+export function readSocketToken(socket) {
   const authToken = socket.handshake.auth?.token;
   if (typeof authToken === "string" && authToken) return authToken;
 
@@ -8,19 +8,12 @@ function readToken(socket) {
   if (typeof header === "string" && header.startsWith("Bearer ")) {
     return header.slice("Bearer ".length);
   }
-
-  // chat_plugin 1.0.0 connects with the apiUrl only and never sets handshake auth.
-  const queryToken = socket.handshake.query?.token;
-  if (typeof queryToken === "string" && queryToken) return queryToken;
-  if (Array.isArray(queryToken) && typeof queryToken[0] === "string" && queryToken[0]) {
-    return queryToken[0];
-  }
   return null;
 }
 
 export async function authenticateSocket(socket, next) {
   try {
-    const session = verifyAccessToken(readToken(socket));
+    const session = await verifyAccessToken(readSocketToken(socket));
     if (!session) {
       next(new Error("Authentication required"));
       return;

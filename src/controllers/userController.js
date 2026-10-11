@@ -1,19 +1,15 @@
+import { sendServiceError } from "../httpError.js";
+import { verifyAccessToken } from "../middleware/auth.js";
 import {
+  deleteAccount,
   getCurrentUser,
   loginUser,
   logoutUser,
-  readLogoutToken,
   registerUser,
   updateLastSeen,
 } from "../services/userService.js";
+import { disconnectUser, disconnectUserToken } from "../socket/realtime.js";
 import { readLogin, readRegister } from "../validation/user.js";
-
-function sendServiceError(err, res) {
-  if (!err.status) throw err;
-  return res.status(err.status).json({
-    error: { code: err.code, message: err.message },
-  });
-}
 
 export async function register(req, res) {
   const parsed = readRegister(req.body);
@@ -50,15 +46,30 @@ export async function login(req, res) {
 export async function logout(req, res) {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
-  const session = readLogoutToken(token);
+  const session = await verifyAccessToken(token);
   if (!session) {
     return res.status(401).json({
       error: { code: "UNAUTHORIZED", message: "Authentication required" },
     });
   }
 
-  logoutUser(session);
-  return res.json({ ok: true });
+  try {
+    await logoutUser(session);
+    disconnectUserToken(session.userId, session.jti);
+    return res.json({ ok: true });
+  } catch (err) {
+    return sendServiceError(err, res);
+  }
+}
+
+export async function removeAccount(req, res) {
+  try {
+    await deleteAccount(req.userId);
+    disconnectUser(req.userId);
+    return res.json({ ok: true });
+  } catch (err) {
+    return sendServiceError(err, res);
+  }
 }
 
 export async function me(req, res) {

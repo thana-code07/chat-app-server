@@ -1,16 +1,12 @@
 import bcrypt from "bcryptjs";
+import { Conversation } from "../models/conversation.js";
+import { Message } from "../models/message.js";
 import { User } from "../models/user.js";
-import { disconnectUserToken } from "../socket/realtime.js";
-import { ACCESS_TTL_SECONDS, readAccessToken, signAccessToken } from "./tokenService.js";
+import { httpError } from "../httpError.js";
+import { forgetUser, revokeSession } from "./revocationService.js";
+import { ACCESS_TTL_SECONDS, signAccessToken } from "./tokenService.js";
 
 const dummyHash = bcrypt.hashSync("not-a-real-password", 12);
-
-function httpError(status, code, message) {
-  const error = new Error(message);
-  error.status = status;
-  error.code = code;
-  return error;
-}
 
 function issueSession(user) {
   return {
@@ -31,11 +27,7 @@ export async function registerUser({ username, email, password }) {
     return issueSession(user);
   } catch (err) {
     if (err?.code === 11000) {
-      const field = Object.keys(err.keyPattern ?? err.keyValue ?? {})[0];
-      if (field === "email") {
-        throw httpError(409, "EMAIL_TAKEN", "Email is already registered");
-      }
-      throw httpError(409, "USERNAME_TAKEN", "Username is already taken");
+      throw httpError(409, "ACCOUNT_EXISTS", "An account with that username or email already exists");
     }
     throw err;
   }
@@ -54,14 +46,19 @@ export async function loginUser({ username, password }) {
   return issueSession(user);
 }
 
-export function readLogoutToken(token) {
-  const session = readAccessToken(token);
-  if (!session || session.expiresAt <= Date.now()) return null;
-  return session;
+export async function logoutUser(session) {
+  await revokeSession(session);
 }
 
-export function logoutUser(session) {
-  disconnectUserToken(session.userId, session.jti);
+export async function deleteAccount(userId) {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw httpError(401, "UNAUTHORIZED", "Authentication required");
+  }
+  await Message.deleteMany({ $or: [{ sender: userId }, { receiver: userId }] });
+  await Conversation.deleteMany({ $or: [{ userId }, { partnerId: userId }] });
+  await User.deleteOne({ _id: userId });
+  forgetUser(userId);
 }
 
 export async function getCurrentUser(userId) {

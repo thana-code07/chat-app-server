@@ -15,12 +15,24 @@ export function emitToUser(userId, event, payload, exceptSocketId) {
   operator.emit(event, payload);
 }
 
+function closeSocket(socket) {
+  socket.emit("auth:expired");
+  setTimeout(() => socket.disconnect(true), 100);
+}
+
 export function disconnectUserToken(userId, jti) {
   if (!io) return;
   for (const socket of io.sockets.sockets.values()) {
     if (socket.data.userId !== userId || socket.data.jti !== jti) continue;
-    socket.emit("auth:expired");
-    setTimeout(() => socket.disconnect(true), 100);
+    closeSocket(socket);
+  }
+}
+
+export function disconnectUser(userId) {
+  if (!io) return;
+  for (const socket of io.sockets.sockets.values()) {
+    if (socket.data.userId !== userId) continue;
+    closeSocket(socket);
   }
 }
 

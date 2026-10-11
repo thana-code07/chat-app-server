@@ -11,6 +11,15 @@ test("login accepts username and password and ignores email", () => {
   assert.deepEqual(result, { username: "Ada_1", password: "password1" });
 });
 
+test("password is rejected when it exceeds 72 bytes", () => {
+  const password = "é".repeat(40);
+  assert.equal(password.length < 72, true);
+  assert.equal(
+    readRegister({ username: "ada", email: "ada@example.com", password }).error,
+    "Password must be at least 8 characters and no more than 72 bytes",
+  );
+});
+
 test("register requires a normal unique-looking email", () => {
   assert.equal(readRegister({ username: "ada", password: "password1" }).error, "Enter a valid email address");
   assert.equal(

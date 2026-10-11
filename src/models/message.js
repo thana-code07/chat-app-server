@@ -46,7 +46,7 @@ const messageSchema = new mongoose.Schema(
   { timestamps: false },
 );
 
-messageSchema.index({ chatroomId: 1, created_at: -1 });
+messageSchema.index({ chatroomId: 1, created_at: -1, messageId: -1 });
 
 messageSchema.methods.toPublic = function toPublic() {
   return {
