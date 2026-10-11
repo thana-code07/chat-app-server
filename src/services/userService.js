@@ -90,7 +90,11 @@ export async function getCurrentUser(userId) {
 }
 
 export async function updateLastSeen(userId) {
-  const user = await User.findByIdAndUpdate(userId, { lastSeen: new Date() }, { new: true });
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { lastSeen: new Date() },
+    { returnDocument: "after" },
+  );
   if (!user) {
     throw httpError(401, "UNAUTHORIZED", "Authentication required");
   }

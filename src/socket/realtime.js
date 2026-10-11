@@ -1,0 +1,47 @@
+import { updateMessageStatus } from "../services/messageService.js";
+import { isOnline, presenceRoom, userRoom } from "./presence.js";
+
+let io = null;
+
+export function setIO(server) {
+  io = server;
+}
+
+export function emitToUser(userId, event, payload, exceptSocketId) {
+  if (!io) return;
+  const operator = exceptSocketId
+    ? io.to(userRoom(userId)).except(exceptSocketId)
+    : io.to(userRoom(userId));
+  operator.emit(event, payload);
+}
+
+export function emitPresence(presence) {
+  if (!io) return;
+  io.to(presenceRoom(presence.userId)).emit("presence:update", presence);
+}
+
+export async function publishNewMessage(result, options = {}) {
+  let message = result.message;
+  if (message.status === "sent" && isOnline(message.receiver)) {
+    try {
+      message = await updateMessageStatus({
+        userId: message.receiver,
+        messageId: message.messageId,
+        status: "delivered",
+      });
+    } catch (err) {
+      console.error(err?.message || "Failed to mark message delivered");
+    }
+  }
+
+  const payload = { message };
+  emitToUser(message.receiver, "message:new", payload);
+  emitToUser(message.sender, "message:new", payload, options.exceptSocketId);
+  return message;
+}
+
+export function publishMessageStatus(message, options = {}) {
+  const payload = { message };
+  emitToUser(message.sender, "message:status", payload);
+  emitToUser(message.receiver, "message:status", payload, options.exceptSocketId);
+}

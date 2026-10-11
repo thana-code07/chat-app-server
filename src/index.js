@@ -1,9 +1,10 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import { connectDB } from "./src/config/db.js";
-import userRouter from "./src/routes/user.js";
-import messageRouter from "./src/routes/message.js";
+import { connectDB } from "./config/db.js";
+import userRouter from "./routes/user.js";
+import messageRouter from "./routes/message.js";
+import { createSocketServer } from "./socket/index.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be set and at least 32 characters");
@@ -44,9 +45,11 @@ app.use((err, req, res, next) => {
   });
 });
 
+const server = createSocketServer(app, { allowedOrigins });
+
 await connectDB();
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
